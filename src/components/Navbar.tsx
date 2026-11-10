@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Globe2, 
   Calendar, 
@@ -15,7 +15,8 @@ import {
   Film,
   Search,
   Eye,
-  Contrast
+  Menu,
+  X
 } from 'lucide-react';
 import { User, BrazilRegion } from '../types';
 import { NosBrLogo } from './NosBrLogo';
@@ -46,15 +47,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   setDarkMode,
   unreadCount,
   highContrast = false,
-  onToggleHighContrast,
   onOpenAccessibilityModal
 }) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleMobileNav = (tab: 'feed' | 'explorar' | 'reels' | 'eventos' | 'conhecimento' | 'comunidades' | 'projetos' | 'conexoes' | 'perfil') => {
+    setActiveTab(tab);
+    setMobileMenuOpen(false);
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-4 md:gap-8 h-16">
-          {/* Zone 1: Wordmark with official logo + Regional Selector */}
-          <div className="flex items-center gap-3 shrink-0">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-2 md:gap-8 h-16">
+          <div className="flex items-center gap-2 shrink-0">
             <button 
               onClick={() => setActiveTab('feed')}
               className="group text-left flex items-center focus:outline-none"
@@ -63,7 +69,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <NosBrLogo size="md" variant="horizontal" showSubtitle={true} />
             </button>
 
-            {/* Nationwide Region filter trigger (clean typography button) */}
             <button
               onClick={onOpenRegionModal}
               className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 rounded-md hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors whitespace-nowrap ml-2"
@@ -77,7 +82,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </div>
 
-          {/* Zone 2: 4–5 concise single-line text navigation links */}
           <nav className="hidden md:flex items-center gap-1 lg:gap-1.5 text-sm font-medium">
             <button
               onClick={() => setActiveTab('feed')}
@@ -179,15 +183,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Zone 3: 1 primary action */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-            {/* Accessibility Quick Panel Trigger */}
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {onOpenAccessibilityModal && (
               <button
                 onClick={onOpenAccessibilityModal}
-                aria-label="Acessibilidade: Alto Contraste e Tamanho da Fonte (Atalho: Alt+A)"
-                title="Acessibilidade: Alto Contraste (Alt+C) | Tamanho da Fonte (Alt+ / Alt-) | Atalho: Alt+A"
-                className={`relative p-2 rounded-lg transition-colors flex items-center justify-center ${
+                aria-label="Acessibilidade"
+                title="Acessibilidade: Alto Contraste e Tamanho da Fonte"
+                className={`relative p-1.5 sm:p-2 rounded-lg transition-colors flex items-center justify-center ${
                   highContrast
                     ? 'bg-amber-400 text-black ring-2 ring-amber-500 font-bold'
                     : 'text-stone-600 dark:text-stone-300 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-stone-100 dark:hover:bg-stone-800'
@@ -200,37 +202,34 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* Dark mode */}
             <button
               onClick={() => setDarkMode(prev => !prev)}
-              aria-label="Alternar tema claro ou escuro"
-              className="p-2 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+              aria-label="Alternar tema"
+              className="p-1.5 sm:p-2 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
             >
               {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-stone-600" />}
             </button>
 
-            {/* Mobile region button */}
             <button
               onClick={onOpenRegionModal}
-              className="lg:hidden p-2 text-emerald-800 dark:text-emerald-300 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition-colors"
+              className="lg:hidden p-1.5 text-emerald-800 dark:text-emerald-300 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition-colors"
               title="Filtrar por região do Brasil"
             >
               <Compass className="w-4 h-4" />
             </button>
 
-            {/* Primary Action Button */}
             <button
               onClick={onOpenCreateModal}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-emerald-800 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 rounded-lg shadow-sm transition-all whitespace-nowrap shrink-0 active:scale-95"
+              className="flex items-center gap-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-white bg-emerald-800 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 rounded-lg shadow-sm transition-all whitespace-nowrap shrink-0 active:scale-95"
             >
               <Plus className="w-4 h-4" />
-              <span>+ Criar / Compartilhar</span>
+              <span className="hidden sm:inline">Criar / Compartilhar</span>
+              <span className="sm:hidden">Criar</span>
             </button>
 
-            {/* Profile Avatar */}
             <button
               onClick={() => setActiveTab('perfil')}
-              className="relative flex items-center gap-2 pl-1 group focus:outline-none"
+              className="hidden sm:flex relative items-center gap-2 pl-1 group focus:outline-none"
               title={currentUser.isVerified ? "Meu Perfil (Embaixador Verificado)" : "Meu Perfil Nós BR"}
             >
               <img
@@ -249,11 +248,62 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               )}
             </button>
+
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-1.5 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg"
+              aria-label="Mais opções"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
 
-        {/* Mobile Navigation Bar (Instagram mobile layout) */}
-        <div className="md:hidden flex items-center justify-around py-2.5 border-t border-stone-200/80 dark:border-stone-800 text-xs">
+        {mobileMenuOpen && (
+          <div className="md:hidden py-3 border-t border-stone-200 dark:border-stone-800 flex flex-col gap-1">
+            <button
+              onClick={() => handleMobileNav('eventos')}
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium ${
+                activeTab === 'eventos' ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold' : 'text-stone-700 dark:text-stone-300'
+              }`}
+            >
+              <Calendar className="w-4 h-4 text-amber-600" />
+              <span>Eventos Brasil</span>
+            </button>
+
+            <button
+              onClick={() => handleMobileNav('conhecimento')}
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium ${
+                activeTab === 'conhecimento' ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold' : 'text-stone-700 dark:text-stone-300'
+              }`}
+            >
+              <Lightbulb className="w-4 h-4 text-amber-600" />
+              <span>Troca de Conhecimento</span>
+            </button>
+
+            <button
+              onClick={() => handleMobileNav('comunidades')}
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium ${
+                activeTab === 'comunidades' ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold' : 'text-stone-700 dark:text-stone-300'
+              }`}
+            >
+              <Users2 className="w-4 h-4 text-emerald-600" />
+              <span>Comunidades</span>
+            </button>
+
+            <button
+              onClick={() => handleMobileNav('projetos')}
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium ${
+                activeTab === 'projetos' ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold' : 'text-stone-700 dark:text-stone-300'
+              }`}
+            >
+              <HandHeart className="w-4 h-4 text-emerald-600" />
+              <span>Projetos</span>
+            </button>
+          </div>
+        )}
+
+        <div className="md:hidden flex items-center justify-around py-2 border-t border-stone-200/80 dark:border-stone-800 text-xs">
           <button
             onClick={() => setActiveTab('feed')}
             className={`flex flex-col items-center gap-1 py-1 px-2 ${
