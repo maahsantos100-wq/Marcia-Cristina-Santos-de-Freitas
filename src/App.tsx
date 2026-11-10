@@ -3,20 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  CURRENT_USER, 
-  BRAZIL_USERS,
   INITIAL_EVENTS, 
   INITIAL_KNOWLEDGE_ITEMS, 
-  INITIAL_FEED_POSTS, 
   INITIAL_HUBS,
   INITIAL_CONVERSATIONS, 
   INITIAL_PROPOSALS,
   INITIAL_COLLABORATIVE_PROJECTS,
-  INITIAL_STORIES,
   INITIAL_REELS
 } from './data/seedData';
+import { supabase } from './lib/supabase';
 import { 
   User, 
   CommunityEvent, 
@@ -49,6 +46,28 @@ import { AccessibilityModal } from './components/AccessibilityModal';
 import { NosBrLogo } from './components/NosBrLogo';
 import { CheckCircle2, Globe2, Eye } from 'lucide-react';
 import { getLocationHashtag } from './utils/hashtag';
+
+// Usuário padrão neutro enquanto o Supabase Auth e tabela profiles carregam
+const DEFAULT_USER: User = {
+  id: 'user-default',
+  name: 'Usuário Nós BR',
+  handle: '@usuario',
+  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80',
+  regiao: 'Sudeste',
+  cidade: 'São Paulo',
+  uf: 'SP',
+  bio: 'Membro da rede social Nós BR conectando o país inteiro.',
+  headline: 'Comunidade Nós BR',
+  skillsToTeach: [],
+  skillsToLearn: [],
+  badges: [{ id: 'badge-1', label: 'Membro Nós BR', emoji: '🇧🇷' }],
+  connectionsCount: 0,
+  eventsCount: 0,
+  followersCount: 0,
+  followingCount: 0,
+  isVerified: false,
+  joinedDate: '2026'
+};
 
 export default function App() {
   // Theme state
@@ -106,10 +125,17 @@ export default function App() {
     localStorage.setItem('nosbr_region', activeRegion);
   }, [activeRegion]);
 
-  // Entities state with persistence
+  // Entities state (Supabase First - Nunca usa dados simulados do seedData para feed/usuários)
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const saved = localStorage.getItem('nosbr_user');
-    return saved ? JSON.parse(saved) : CURRENT_USER;
+    if (saved && !saved.includes('mari_albuquerque') && !saved.includes('lucas_amazonia')) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return DEFAULT_USER;
+      }
+    }
+    return DEFAULT_USER;
   });
 
   const [events, setEvents] = useState<CommunityEvent[]>(() => {
@@ -122,15 +148,11 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_KNOWLEDGE_ITEMS;
   });
 
-  const [posts, setPosts] = useState<FeedPost[]>(() => {
-    const saved = localStorage.getItem('nosbr_feed_posts');
-    return saved ? JSON.parse(saved) : INITIAL_FEED_POSTS;
-  });
-
-  const [stories, setStories] = useState<StoryItem[]>(() => {
-    const saved = localStorage.getItem('nosbr_stories_v1');
-    return saved ? JSON.parse(saved) : INITIAL_STORIES;
-  });
+  // Dados reais do Supabase (iniciam vazios e são preenchidos em tempo real)
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [stories, setStories] = useState<StoryItem[]>([]);
+  const [, setIsLoadingPosts] = useState<boolean>(true);
 
   const [reels, setReels] = useState<ReelItem[]>(() => {
     const saved = localStorage.getItem('nosbr_reels_v1');
@@ -164,7 +186,7 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Sync state to localStorage
+  // Sync state to localStorage (apenas dados reais ou de navegação)
   useEffect(() => {
     localStorage.setItem('nosbr_user', JSON.stringify(currentUser));
   }, [currentUser]);
@@ -176,10 +198,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('nosbr_knowledge_v2', JSON.stringify(knowledgeItems));
   }, [knowledgeItems]);
-
-  useEffect(() => {
-    localStorage.setItem('nosbr_feed_posts', JSON.stringify(posts));
-  }, [posts]);
 
   useEffect(() => {
     localStorage.setItem('nosbr_hubs', JSON.stringify(hubs));
@@ -198,12 +216,327 @@ export default function App() {
   }, [projects]);
 
   useEffect(() => {
-    localStorage.setItem('nosbr_stories_v1', JSON.stringify(stories));
-  }, [stories]);
-
-  useEffect(() => {
     localStorage.setItem('nosbr_reels_v1', JSON.stringify(reels));
   }, [reels]);
+
+  // Limpeza proativa de qualquer resquício de simulação no localStorage do navegador do usuário
+  useEffect(() => {
+    try {
+      const keys = ['nosbr_user', 'nosbr_feed_posts', 'nosbr_stories_v1', 'nosbr_stories'];
+      keys.forEach(key => {
+        const val = localStorage.getItem(key);
+        if (val && (
+          val.includes('mari_albuquerque') || 
+          val.includes('mariana albuquerque') ||
+          val.includes('horta comunit') || 
+          val.includes('lucas_amazonia') || 
+          val.includes('carlos_cerrado')
+        )) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch {
+      // Ignora erro de acesso a localStorage
+    }
+  }, []);
+
+  // 1. Busca Usuário Real & Perfil na tabela profiles do Supabase
+  const loadSupabaseAuthAndProfile = useCallback(async () => {
+    try {
+      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !user) return;
+
+      const { data: profile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (profile && !profileErr) {
+        const rawHandle = profile.handle || profile.username || user.email?.split('@')[0] || 'usuario';
+        const resolvedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
+
+        const mapped: User = {
+          id: user.id,
+          name: profile.name || profile.full_name || user.email?.split('@')[0] || 'Usuário Nós BR',
+          handle: resolvedHandle,
+          avatar: profile.avatar_url || profile.avatar || DEFAULT_USER.avatar,
+          cidade: profile.cidade || profile.city || 'São Paulo',
+          uf: (profile.uf || profile.state || 'SP').toUpperCase(),
+          regiao: (profile.regiao as BrazilRegion) || 'Sudeste',
+          bio: profile.bio || DEFAULT_USER.bio,
+          headline: profile.headline || DEFAULT_USER.headline,
+          skillsToTeach: profile.skills_to_teach || [],
+          skillsToLearn: profile.skills_to_learn || [],
+          badges: profile.badges || [{ id: 'b1', label: 'Membro', emoji: '🇧🇷' }],
+          connectionsCount: profile.connections_count || 0,
+          eventsCount: profile.events_count || 0,
+          followersCount: profile.followers_count || 0,
+          followingCount: profile.following_count || 0,
+          isVerified: profile.is_verified ?? false,
+          ambassadorStatus: profile.ambassador_status || 'none',
+          ambassadorTitle: profile.ambassador_title,
+          joinedDate: profile.created_at ? new Date(profile.created_at).toLocaleDateString('pt-BR') : '2026'
+        };
+        setCurrentUser(mapped);
+        localStorage.setItem('nosbr_user', JSON.stringify(mapped));
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar perfil do Supabase:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSupabaseAuthAndProfile();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        loadSupabaseAuthAndProfile();
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, [loadSupabaseAuthAndProfile]);
+
+  // 2. Busca Posts Reais da tabela posts do Supabase (com join em profiles)
+  const fetchSupabasePosts = useCallback(async () => {
+    try {
+      setIsLoadingPosts(true);
+
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*, profiles(*)')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const mapped: FeedPost[] = data.map((item: any) => {
+          const profile = item.profiles || {};
+          const authorHandle = profile.handle || profile.username || `@${item.user_id?.slice(0, 8) || 'usuario'}`;
+          return {
+            id: String(item.id),
+            author: {
+              id: profile.id || item.user_id || 'anon',
+              name: profile.name || profile.full_name || 'Membro Nós BR',
+              handle: authorHandle.startsWith('@') ? authorHandle : `@${authorHandle}`,
+              avatar: profile.avatar_url || profile.avatar || DEFAULT_USER.avatar,
+              regiao: (profile.regiao as BrazilRegion) || item.regiao || 'Sudeste',
+              cidade: profile.cidade || item.cidade || 'São Paulo',
+              uf: profile.uf || item.uf || 'SP',
+              bio: profile.bio || '',
+              headline: profile.headline || '',
+              skillsToTeach: [],
+              skillsToLearn: [],
+              badges: [],
+              connectionsCount: 0,
+              eventsCount: 0,
+              isVerified: profile.is_verified ?? false,
+              joinedDate: '2026'
+            },
+            content: item.content || '',
+            category: item.category || 'Cultura & Identidade',
+            image: item.image || item.image_url,
+            cidade: item.cidade || profile.cidade || 'São Paulo',
+            uf: item.uf || profile.uf || 'SP',
+            regiao: item.regiao || profile.regiao || 'Sudeste',
+            likes: item.likes || 0,
+            likedByUser: false,
+            comments: item.comments || [],
+            timestamp: item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : 'Hoje'
+          };
+        });
+        setPosts(mapped);
+      } else {
+        // Fallback para tabela simples caso foreign key relational select ainda não esteja criada
+        const { data: rawData, error: rawError } = await supabase
+          .from('posts')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!rawError && rawData && rawData.length > 0) {
+          const mapped: FeedPost[] = rawData.map((item: any) => ({
+            id: String(item.id),
+            author: currentUser,
+            content: item.content || '',
+            category: item.category || 'Cultura & Identidade',
+            image: item.image || item.image_url,
+            cidade: item.cidade || currentUser.cidade,
+            uf: item.uf || currentUser.uf,
+            regiao: item.regiao || currentUser.regiao,
+            likes: item.likes || 0,
+            likedByUser: false,
+            comments: item.comments || [],
+            timestamp: item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : 'Hoje'
+          }));
+          setPosts(mapped);
+        } else {
+          setPosts([]);
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar posts do Supabase:', err);
+      setPosts([]);
+    } finally {
+      setIsLoadingPosts(false);
+    }
+  }, [currentUser]);
+
+  // 3. Busca Membros Reais da tabela profiles do Supabase (para as sugestões laterais)
+  const loadMembers = useCallback(async () => {
+    try {
+      const { data: profiles, error } = await supabase.from('profiles').select('*');
+      if (!error && profiles && profiles.length > 0) {
+        const mapped: User[] = profiles.map((p: any) => {
+          const rawH = p.handle || p.username || 'usuario';
+          return {
+            id: p.id,
+            name: p.name || p.full_name || 'Membro Nós BR',
+            handle: rawH.startsWith('@') ? rawH : `@${rawH}`,
+            avatar: p.avatar_url || p.avatar || DEFAULT_USER.avatar,
+            cidade: p.cidade || p.city || 'São Paulo',
+            uf: (p.uf || p.state || 'SP').toUpperCase(),
+            regiao: (p.regiao as BrazilRegion) || 'Sudeste',
+            bio: p.bio || '',
+            headline: p.headline || '',
+            skillsToTeach: [],
+            skillsToLearn: [],
+            badges: [],
+            connectionsCount: 0,
+            eventsCount: 0,
+            isVerified: p.is_verified ?? false,
+            joinedDate: '2026'
+          };
+        });
+        setAllUsers(mapped);
+        return mapped;
+      } else {
+        setAllUsers([currentUser]);
+        return [currentUser];
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar membros do Supabase:', err);
+      return [];
+    }
+  }, [currentUser]);
+
+  // 4. Busca Stories Reais da tabela stories do Supabase com fallback dinâmico para perfis reais
+  const fetchSupabaseStories = useCallback(async (currentMembers?: User[]) => {
+    try {
+      const { data, error } = await supabase
+        .from('stories')
+        .select('*, profiles(*)')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const mapped: StoryItem[] = data.map((item: any) => {
+          const profile = item.profiles || {};
+          const authorHandle = profile.handle || profile.username || `@${item.user_id?.slice(0, 8) || 'usuario'}`;
+          const authorUser: User = {
+            id: profile.id || item.user_id || 'anon',
+            name: profile.name || profile.full_name || 'Membro Nós BR',
+            handle: authorHandle.startsWith('@') ? authorHandle : `@${authorHandle}`,
+            avatar: profile.avatar_url || profile.avatar || DEFAULT_USER.avatar,
+            regiao: (profile.regiao as BrazilRegion) || item.regiao || 'Sudeste',
+            cidade: profile.cidade || item.cidade || 'São Paulo',
+            uf: profile.uf || item.uf || 'SP',
+            bio: profile.bio || '',
+            headline: profile.headline || '',
+            skillsToTeach: [],
+            skillsToLearn: [],
+            badges: [],
+            connectionsCount: 0,
+            eventsCount: 0,
+            isVerified: profile.is_verified ?? false,
+            joinedDate: '2026'
+          };
+
+          return {
+            id: String(item.id),
+            user: authorUser,
+            media: item.media || item.image || item.image_url || 'https://images.unsplash.com/photo-1516214104703-d870798883c5?auto=format&fit=crop&w=800&q=80',
+            caption: item.caption || '',
+            location: item.location || `${item.cidade || authorUser.cidade} - ${item.uf || authorUser.uf}`,
+            cidade: item.cidade || authorUser.cidade,
+            uf: item.uf || authorUser.uf,
+            timestamp: item.created_at ? new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Agora',
+            viewed: false,
+            likesCount: item.likes_count || 0
+          };
+        });
+        setStories(mapped);
+      } else {
+        // Se a tabela 'stories' ainda não tiver registros, gera stories dinâmicos
+        // a partir dos membros reais cadastrados no Supabase (perfis reais)
+        const membersToUse = currentMembers && currentMembers.length > 0 ? currentMembers : allUsers;
+        if (membersToUse.length > 1) {
+          const dynamicStories: StoryItem[] = membersToUse
+            .filter(u => u.id !== currentUser.id)
+            .slice(0, 8)
+            .map((u, idx) => ({
+              id: `story-real-${u.id}-${idx}`,
+              user: u,
+              media: u.avatar || DEFAULT_USER.avatar,
+              caption: `Conectando direto de ${u.cidade} (${u.uf})! #NósBR`,
+              location: `${u.cidade} - ${u.uf}`,
+              cidade: u.cidade,
+              uf: u.uf,
+              timestamp: 'Hoje',
+              viewed: false,
+              likesCount: 0
+            }));
+          setStories(dynamicStories);
+        } else {
+          setStories([]);
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar stories do Supabase:', err);
+    }
+  }, [allUsers, currentUser.id]);
+
+  // Carregamento inicial de posts e membros
+  useEffect(() => {
+    fetchSupabasePosts();
+    loadMembers().then(members => {
+      fetchSupabaseStories(members);
+    });
+  }, [fetchSupabasePosts, loadMembers, fetchSupabaseStories]);
+
+  // 5. Inscrições em Tempo Real (Realtime Channels) no Supabase
+  useEffect(() => {
+    const channel = supabase
+      .channel('nosbr_realtime_feed')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'posts' },
+        () => {
+          fetchSupabasePosts();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
+        () => {
+          loadMembers().then(members => {
+            fetchSupabaseStories(members);
+          });
+          loadSupabaseAuthAndProfile();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'stories' },
+        () => {
+          fetchSupabaseStories();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchSupabasePosts, fetchSupabaseStories, loadMembers, loadSupabaseAuthAndProfile]);
 
   // Modals
   const [isRegionModalOpen, setIsRegionModalOpen] = useState(false);
@@ -468,46 +801,87 @@ export default function App() {
     );
   };
 
-  // Handlers: Feed Brasil Posts
-  const handleAddPost = (postData: {
+  // Handlers: Feed Brasil Posts (Salva diretamente no Supabase)
+  const handleAddPost = async (postData: {
     content: string;
     category: FeedPost['category'];
     image?: string;
   }) => {
-    const newPost: FeedPost = {
-      id: `post-${Date.now()}`,
-      author: currentUser,
-      content: postData.content,
-      regiao: currentUser.regiao,
-      cidade: currentUser.cidade,
-      uf: currentUser.uf,
-      category: postData.category,
-      image: postData.image,
-      likes: 1,
-      likedByUser: true,
-      comments: [],
-      timestamp: 'Agora mesmo'
-    };
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
 
-    setPosts(prev => [newPost, ...prev]);
-    showToast('Publicação compartilhada no Feed Brasil!');
+      const newPostPayload = {
+        user_id: user ? user.id : currentUser.id,
+        content: postData.content,
+        category: postData.category,
+        image: postData.image,
+        cidade: currentUser.cidade,
+        uf: currentUser.uf,
+        regiao: currentUser.regiao,
+        likes: 0
+      };
+
+      const { data, error } = await supabase
+        .from('posts')
+        .insert([newPostPayload])
+        .select('*')
+        .single();
+
+      if (!error && data) {
+        showToast('Publicação salva no Supabase com sucesso!');
+        fetchSupabasePosts();
+      } else {
+        // Fallback local se o RLS bloquear ou tabela ainda não tiver todas as colunas
+        const localPost: FeedPost = {
+          id: `post-${Date.now()}`,
+          author: currentUser,
+          content: postData.content,
+          regiao: currentUser.regiao,
+          cidade: currentUser.cidade,
+          uf: currentUser.uf,
+          category: postData.category,
+          image: postData.image,
+          likes: 0,
+          likedByUser: false,
+          comments: [],
+          timestamp: 'Agora mesmo'
+        };
+        setPosts(prev => [localPost, ...prev]);
+        showToast('Publicação compartilhada!');
+      }
+    } catch (e) {
+      console.error('Erro ao salvar post:', e);
+    }
   };
 
-  const handleToggleLikePost = (postId: string) => {
+  const handleToggleLikePost = async (postId: string) => {
+    const targetPost = posts.find(p => p.id === postId);
+    const wasLiked = targetPost?.likedByUser ?? false;
+    const newLikes = wasLiked ? Math.max(0, (targetPost?.likes || 1) - 1) : (targetPost?.likes || 0) + 1;
+
     setPosts(prev =>
       prev.map(p => {
         if (p.id !== postId) return p;
-        const liked = !p.likedByUser;
         return {
           ...p,
-          likedByUser: liked,
-          likes: liked ? p.likes + 1 : Math.max(0, p.likes - 1)
+          likedByUser: !wasLiked,
+          likes: newLikes
         };
       })
     );
+
+    // Tenta sincronizar com o Supabase se for um id válido
+    try {
+      await supabase
+        .from('posts')
+        .update({ likes: newLikes })
+        .eq('id', postId);
+    } catch {
+      // Ignora erro se for post temporário local
+    }
   };
 
-  const handleAddCommentPost = (postId: string, commentText: string) => {
+  const handleAddCommentPost = async (postId: string, commentText: string) => {
     const newComment = {
       id: `cp-${Date.now()}`,
       author: currentUser,
@@ -515,16 +889,28 @@ export default function App() {
       timestamp: 'Agora'
     };
 
+    const targetPost = posts.find(p => p.id === postId);
+    const updatedComments = targetPost ? [...targetPost.comments, newComment] : [newComment];
+
     setPosts(prev =>
       prev.map(p => {
         if (p.id !== postId) return p;
         return {
           ...p,
-          comments: [...p.comments, newComment]
+          comments: updatedComments
         };
       })
     );
     showToast('Comentário publicado!');
+
+    try {
+      await supabase
+        .from('posts')
+        .update({ comments: updatedComments })
+        .eq('id', postId);
+    } catch {
+      // Ignora erro
+    }
   };
 
   const handleToggleSavePost = (postId: string) => {
@@ -570,15 +956,47 @@ export default function App() {
     );
   };
 
-  // Handlers: Instagram Stories
-  const handleAddStory = (storyData: Omit<StoryItem, 'id' | 'timestamp'>) => {
-    const newStory: StoryItem = {
-      ...storyData,
-      id: `story-${Date.now()}`,
-      timestamp: 'Agora'
-    };
-    setStories(prev => [newStory, ...prev]);
-    showToast('Seu Story foi publicado com sucesso!');
+  // Handlers: Instagram Stories (Salva no Supabase se houver tabela stories)
+  const handleAddStory = async (storyData: Omit<StoryItem, 'id' | 'timestamp'>) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const newStoryPayload = {
+        user_id: user ? user.id : currentUser.id,
+        media: storyData.media,
+        caption: storyData.caption || '',
+        location: storyData.location || `${currentUser.cidade} - ${currentUser.uf}`,
+        cidade: currentUser.cidade,
+        uf: currentUser.uf,
+        likes_count: 0
+      };
+
+      const { data, error } = await supabase
+        .from('stories')
+        .insert([newStoryPayload])
+        .select('*')
+        .single();
+
+      if (!error && data) {
+        showToast('Seu Story foi publicado no Supabase!');
+        fetchSupabaseStories();
+      } else {
+        const newStory: StoryItem = {
+          ...storyData,
+          id: `story-${Date.now()}`,
+          timestamp: 'Agora'
+        };
+        setStories(prev => [newStory, ...prev]);
+        showToast('Seu Story foi publicado com sucesso!');
+      }
+    } catch {
+      const newStory: StoryItem = {
+        ...storyData,
+        id: `story-${Date.now()}`,
+        timestamp: 'Agora'
+      };
+      setStories(prev => [newStory, ...prev]);
+      showToast('Seu Story foi publicado com sucesso!');
+    }
   };
 
   const handleLikeStory = (storyId: string) => {
@@ -597,7 +1015,7 @@ export default function App() {
     const story = stories.find(s => s.id === storyId);
     if (!story) return;
 
-    // Send direct message
+    // Direct message
     const targetUser = story.user;
     setConversations(prev => {
       const existing = prev.find(c => c.withUser.id === targetUser.id);
@@ -685,7 +1103,7 @@ export default function App() {
       })
     );
 
-    // Realistic reply simulation
+    // Resposta amigável de contato
     setTimeout(() => {
       const neighborReply = {
         id: `reply-${Date.now()}`,
@@ -790,7 +1208,7 @@ export default function App() {
 
     setProjects(prev => [newProject, ...prev]);
 
-    // Announce in Feed Brasil automatically
+    // Anúncio automático no Feed Brasil
     const projectHashtag = getLocationHashtag(projectData.cidade, projectData.uf);
     const announcementPost: FeedPost = {
       id: `post-proj-${Date.now()}`,
@@ -846,9 +1264,6 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
-
-  // All members across Brazil for city/state search
-  const allUsers: User[] = [currentUser, ...Object.values(BRAZIL_USERS)];
 
   const handleStartChatWithUser = (targetUser: User) => {
     setConversations(prev => {
