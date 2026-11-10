@@ -1,0 +1,6 @@
+{
+  "name": "Nós BR - Rede Social de Conexões & Conhecimento",
+  "description": "Rede social brasileira no estilo Instagram para conectar o país inteiro através de fotos, stories, reels, comunidades temáticas e projetos colaborativos de norte a sul.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

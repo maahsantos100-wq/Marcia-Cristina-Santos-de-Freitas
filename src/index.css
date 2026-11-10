@@ -1,0 +1,78 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  /* Accessible focus indicators */
+  :focus-visible {
+    outline: 2px solid #059669;
+    outline-offset: 2px;
+  }
+}
+
+/* High Contrast Accessibility Mode Overrides */
+html.high-contrast {
+  filter: contrast(135%);
+}
+
+html.high-contrast body {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+html.high-contrast .bg-white,
+html.high-contrast .bg-stone-50,
+html.high-contrast .bg-stone-100,
+html.high-contrast .bg-stone-800,
+html.high-contrast .bg-stone-900,
+html.high-contrast .bg-stone-950 {
+  background-color: #050505 !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+html.high-contrast p,
+html.high-contrast span,
+html.high-contrast h1,
+html.high-contrast h2,
+html.high-contrast h3,
+html.high-contrast h4,
+html.high-contrast label {
+  color: #ffffff !important;
+}
+
+html.high-contrast .text-stone-400,
+html.high-contrast .text-stone-500,
+html.high-contrast .text-stone-600 {
+  color: #f3f4f6 !important;
+}
+
+html.high-contrast a,
+html.high-contrast button {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+html.high-contrast :focus-visible {
+  outline: 3px solid #facc15 !important;
+  outline-offset: 3px !important;
+}
+
+html.high-contrast .border,
+html.high-contrast .border-t,
+html.high-contrast .border-b,
+html.high-contrast .border-l,
+html.high-contrast .border-r {
+  border-color: #ffffff !important;
+  border-width: 1.5px !important;
+}
+
+
