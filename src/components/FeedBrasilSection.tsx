@@ -12,6 +12,9 @@ export default function FeedBrasilSection() {
   const [regiaoSelecionada, setRegiaoSelecionada] = useState('Brasil');
   const [novoPost, setNovoPost] = useState('');
   const [menuRegioesAberto, setMenuRegioesAberto] = useState(false);
+  
+  // Estado para guardar as informações do usuário real que fez login
+  const [usuarioLogado, setUsuarioLogado] = useState<any>(null);
 
   // Mapeamento dos estados brasileiros por macrorregião para o filtro do Nós BR
   const regioesEstados: Record<string, string[]> = {
@@ -21,6 +24,26 @@ export default function FeedBrasilSection() {
     'Centro-Oeste': ['DF', 'GO', 'MT', 'MS'],
     'Norte': ['AM', 'PA', 'RO', 'RR', 'AC', 'TO', 'AP']
   };
+
+  // Função para buscar as informações do usuário real logado
+  async function obterPerfilUsuario() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: perfil } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        if (perfil) {
+          setUsuarioLogado(perfil);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar perfil real:', error);
+    }
+  }
 
   // Função que busca e filtra as postagens direto do Supabase
   async function carregarPosts() {
@@ -55,7 +78,9 @@ export default function FeedBrasilSection() {
     }
   }
 
+  // Carrega o perfil do usuário e os posts assim que a tela abre
   useEffect(() => {
+    obterPerfilUsuario();
     carregarPosts();
   }, [regiaoSelecionada]);
 
@@ -130,6 +155,7 @@ export default function FeedBrasilSection() {
                   {post.profiles?.username?.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <div>
+                  {/* Puxa dinamicamente o username real e o estado real salvos no Supabase */}
                   <h4 style={{ margin: 0 }}>{post.profiles?.username || 'Usuário Nós BR'}</h4>
                   <span style={{ color: '#00a86b', fontSize: '12px', fontWeight: 'bold' }}>
                     #NósNo{post.profiles?.estado_uf || 'BR'}
@@ -153,7 +179,7 @@ export default function FeedBrasilSection() {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: '#fff', color: '#000', width: '90%', maxWidth: '450px', borderRadius: '20px', padding: '20px', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
-              <h3 style={{ margin: 0, color: '#1c1614' }}>处理 Conexões por Região do Brasil</h3>
+              <h3 style={{ margin: 0, color: '#1c1614' }}>Conexões por Região do Brasil</h3>
               <button onClick={() => setMenuRegioesAberto(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>×</button>
             </div>
             
