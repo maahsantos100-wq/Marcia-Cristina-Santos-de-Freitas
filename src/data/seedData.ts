@@ -1,1 +1,11 @@
-
+export const CURRENT_USER: any = null;
+export const BRAZIL_USERS: any[] = [];
+export const INITIAL_EVENTS: any[] = [];
+export const INITIAL_KNOWLEDGE_ITEMS: any[] = [];
+export const INITIAL_FEED_POSTS: any[] = [];
+export const INITIAL_HUBS: any[] = [];
+export const INITIAL_CONVERSATIONS: any[] = [];
+export const INITIAL_PROPOSALS: any[] = [];
+export const INITIAL_COLLABORATIVE_PROJECTS: any[] = [];
+export const INITIAL_REELS: any[] = [];
+export const INITIAL_STORIES: any[] = [];
